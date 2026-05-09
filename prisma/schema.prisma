@@ -1,0 +1,376 @@
+// This is your Prisma schema file.
+// Learn more at https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  customer
+  worker
+  admin
+}
+
+enum OrderType {
+  ready_made
+  custom
+}
+
+enum OrderStatus {
+  pending
+  confirmed
+  cutting
+  sewing
+  embroidery
+  finishing
+  qc
+  ready
+  out_for_delivery
+  delivered
+  cancelled
+}
+
+enum PaymentStatus {
+  unpaid
+  deposit_paid
+  fully_paid
+  refunded
+}
+
+enum PaymentMethod {
+  mtn_momo
+  vodafone_cash
+  airteltigo_money
+  paystack_card
+  bank_transfer
+  cash_on_pickup
+}
+
+enum NotificationType {
+  order_confirmed
+  status_update
+  ready_for_pickup
+  payment_received
+  worker_assigned
+  message
+  promotion
+}
+
+model User {
+  id            String    @id @default(uuid())
+  firstName     String    @map("first_name")
+  lastName      String    @map("last_name")
+  email         String?   @unique
+  phone         String    @unique
+  passwordHash  String    @map("password_hash")
+  role          UserRole  @default(customer)
+  avatarUrl     String?   @map("avatar_url")
+  isActive      Boolean   @default(true) @map("is_active")
+  isVerified    Boolean   @default(false) @map("is_verified")
+  otpCode       String?   @map("otp_code")
+  otpExpiresAt  DateTime? @map("otp_expires_at")
+  fcmToken      String?   @map("fcm_token")
+  refreshToken  String?   @map("refresh_token")
+  lastLoginAt   DateTime? @map("last_login_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  measurements  CustomerMeasurement[]
+  ordersAsCustomer Order[]           @relation("CustomerOrders")
+  ordersAssigned   Order[]           @relation("AssignedByOrders")
+  worker        Worker?
+  notifications Notification[]
+  sentMessages  Message[]
+  payments      Payment[]
+  wishlist      Wishlist[]
+  reviews       Review[]
+  statusChanges OrderStatusHistory[]
+
+  @@map("users")
+}
+
+model CustomerMeasurement {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  label         String   @default("My Measurements")
+  chest         Decimal? @db.Decimal(5,2)
+  shoulder      Decimal? @db.Decimal(5,2)
+  sleeve        Decimal? @db.Decimal(5,2)
+  waist         Decimal? @db.Decimal(5,2)
+  hip           Decimal? @db.Decimal(5,2)
+  thigh         Decimal? @db.Decimal(5,2)
+  inseam        Decimal? @db.Decimal(5,2)
+  neck          Decimal? @db.Decimal(5,2)
+  totalLength   Decimal? @db.Decimal(5,2) @map("total_length")
+  trouserWaist  Decimal? @db.Decimal(5,2) @map("trouser_waist")
+  trouserLength Decimal? @db.Decimal(5,2) @map("trouser_length")
+  notes         String?
+  isDefault     Boolean  @default(false) @map("is_default")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders        Order[]
+
+  @@map("customer_measurements")
+}
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  slug        String    @unique
+  description String?
+  sortOrder   Int       @default(0) @map("sort_order")
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  products    Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id              String    @id @default(uuid())
+  categoryId      String    @map("category_id")
+  name            String
+  slug            String    @unique
+  description     String?
+  price           Decimal   @db.Decimal(10,2)
+  comparePrice    Decimal?  @db.Decimal(10,2) @map("compare_price")
+  sku             String?   @unique
+  fabricType      String?   @map("fabric_type")
+  availableSizes  String[]  @map("available_sizes")
+  availableColors String[]  @map("available_colors")
+  isActive        Boolean   @default(true) @map("is_active")
+  isFeatured      Boolean   @default(false) @map("is_featured")
+  tag             String?
+  stockQty        Int       @default(0) @map("stock_qty")
+  soldCount       Int       @default(0) @map("sold_count")
+  sortOrder       Int       @default(0) @map("sort_order")
+  createdBy       String?   @map("created_by")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  category        Category  @relation(fields: [categoryId], references: [id])
+  images          ProductImage[]
+  orders          Order[]
+  wishlist        Wishlist[]
+
+  @@map("products")
+}
+
+model ProductImage {
+  id         String   @id @default(uuid())
+  productId  String   @map("product_id")
+  url        String
+  publicId   String?  @map("public_id")
+  altText    String?  @map("alt_text")
+  isPrimary  Boolean  @default(false) @map("is_primary")
+  sortOrder  Int      @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_images")
+}
+
+model Worker {
+  id             String   @id @default(uuid())
+  userId         String   @unique @map("user_id")
+  specialties    String[]
+  maxCapacity    Int      @default(5) @map("max_capacity")
+  isAvailable    Boolean  @default(true) @map("is_available")
+  rating         Decimal  @default(5.0) @db.Decimal(3,2)
+  totalCompleted Int      @default(0) @map("total_completed")
+  joinedAt       DateTime @default(now()) @map("joined_at")
+
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders         Order[]
+
+  @@map("workers")
+}
+
+model Order {
+  id               String        @id @default(uuid())
+  orderNumber      String        @unique @map("order_number")
+  customerId       String        @map("customer_id")
+  workerId         String?       @map("worker_id")
+  assignedBy       String?       @map("assigned_by")
+  assignedAt       DateTime?     @map("assigned_at")
+  orderType        OrderType     @default(custom) @map("order_type")
+  productId        String?       @map("product_id")
+  productSize      String?       @map("product_size")
+  garmentType      String        @map("garment_type")
+  fabricType       String?       @map("fabric_type")
+  fabricColor      String?       @map("fabric_color")
+  embroideryStyle  String?       @map("embroidery_style")
+  specialNotes     String?       @map("special_notes")
+  styleDescription String?       @map("style_description")
+  urgency          String        @default("standard")
+  measurementId    String?       @map("measurement_id")
+  chest            Decimal?      @db.Decimal(5,2)
+  shoulder         Decimal?      @db.Decimal(5,2)
+  sleeve           Decimal?      @db.Decimal(5,2)
+  waist            Decimal?      @db.Decimal(5,2)
+  hip              Decimal?      @db.Decimal(5,2)
+  thigh            Decimal?      @db.Decimal(5,2)
+  inseam           Decimal?      @db.Decimal(5,2)
+  totalLength      Decimal?      @db.Decimal(5,2) @map("total_length")
+  trouserWaist     Decimal?      @db.Decimal(5,2) @map("trouser_waist")
+  trouserLength    Decimal?      @db.Decimal(5,2) @map("trouser_length")
+  deliveryAddress  String?       @map("delivery_address")
+  deliveryType     String        @default("pickup") @map("delivery_type")
+  dueDate          DateTime?     @db.Date @map("due_date")
+  deliveredAt      DateTime?     @map("delivered_at")
+  basePrice        Decimal?      @db.Decimal(10,2) @map("base_price")
+  expressFee       Decimal       @default(0) @db.Decimal(10,2) @map("express_fee")
+  embroideryFee    Decimal       @default(0) @db.Decimal(10,2) @map("embroidery_fee")
+  deliveryFee      Decimal       @default(0) @db.Decimal(10,2) @map("delivery_fee")
+  discountAmount   Decimal       @default(0) @db.Decimal(10,2) @map("discount_amount")
+  totalAmount      Decimal?      @db.Decimal(10,2) @map("total_amount")
+  paymentStatus    PaymentStatus @default(unpaid) @map("payment_status")
+  paymentMethod    PaymentMethod? @map("payment_method")
+  depositAmount    Decimal       @default(0) @db.Decimal(10,2) @map("deposit_amount")
+  depositPaidAt    DateTime?     @map("deposit_paid_at")
+  balancePaidAt    DateTime?     @map("balance_paid_at")
+  paystackRef      String?       @map("paystack_ref")
+  status           OrderStatus   @default(pending)
+  cancelledReason  String?       @map("cancelled_reason")
+  cancelledAt      DateTime?     @map("cancelled_at")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  customer         User          @relation("CustomerOrders", fields: [customerId], references: [id])
+  worker           Worker?       @relation(fields: [workerId], references: [id])
+  assignedByUser   User?         @relation("AssignedByOrders", fields: [assignedBy], references: [id])
+  product          Product?      @relation(fields: [productId], references: [id])
+  measurement      CustomerMeasurement? @relation(fields: [measurementId], references: [id])
+  statusHistory    OrderStatusHistory[]
+  images           OrderImage[]
+  messages         Message[]
+  payments         Payment[]
+  review           Review?
+
+  @@map("orders")
+}
+
+model OrderStatusHistory {
+  id         String      @id @default(uuid())
+  orderId    String      @map("order_id")
+  status     OrderStatus
+  changedBy  String?     @map("changed_by")
+  note       String?
+  createdAt  DateTime    @default(now()) @map("created_at")
+
+  order      Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  changedByUser User?    @relation(fields: [changedBy], references: [id])
+
+  @@map("order_status_history")
+}
+
+model OrderImage {
+  id        String   @id @default(uuid())
+  orderId   String   @map("order_id")
+  url       String
+  publicId  String?  @map("public_id")
+  label     String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_images")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String           @map("user_id")
+  type      NotificationType
+  title     String
+  body      String
+  data      Json             @default("{}")
+  isRead    Boolean          @default(false) @map("is_read")
+  sentPush  Boolean          @default(false) @map("sent_push")
+  sentSms   Boolean          @default(false) @map("sent_sms")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  orderId   String   @map("order_id")
+  senderId  String   @map("sender_id")
+  body      String
+  imageUrl  String?  @map("image_url")
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sender    User     @relation(fields: [senderId], references: [id])
+
+  @@map("messages")
+}
+
+model Payment {
+  id              String        @id @default(uuid())
+  orderId         String        @map("order_id")
+  customerId      String        @map("customer_id")
+  amount          Decimal       @db.Decimal(10,2)
+  currency        String        @default("GHS")
+  method          PaymentMethod
+  paystackRef     String?       @unique @map("paystack_ref")
+  paystackStatus  String?       @map("paystack_status")
+  isDeposit       Boolean       @default(false) @map("is_deposit")
+  verifiedAt      DateTime?     @map("verified_at")
+  metadata        Json          @default("{}")
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  order           Order         @relation(fields: [orderId], references: [id])
+  customer        User          @relation(fields: [customerId], references: [id])
+
+  @@map("payments")
+}
+
+model Wishlist {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  productId String   @map("product_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@map("wishlists")
+}
+
+model Review {
+  id          String   @id @default(uuid())
+  orderId     String   @unique @map("order_id")
+  customerId  String   @map("customer_id")
+  rating      Int
+  comment     String?
+  isApproved  Boolean  @default(false) @map("is_approved")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  order       Order    @relation(fields: [orderId], references: [id])
+  customer    User     @relation(fields: [customerId], references: [id])
+
+  @@map("reviews")
+}
+
+model Setting {
+  key         String   @id
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
